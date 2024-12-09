@@ -1,0 +1,63 @@
+name: Docker Compose CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      db:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mydatabase
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+        ports:
+          - 5432:5432
+
+    steps:
+    
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    
+    - name: Set up Docker Compose
+      run: sudo apt-get update && sudo apt-get install -y docker-compose
+
+    
+    - name: Build and run Docker Compose
+      run: docker-compose up --build -d
+
+    
+    - name: Wait for database to be ready
+      run: |
+        for i in {1..10}; do
+          nc -z localhost 5432 && echo "Database is ready" && exit 0 || echo "Waiting for database..."
+          sleep 5
+        done
+        echo "Database not ready in time" && exit 1
+
+   
+    - name: Run application tests
+      run: |
+        curl -f http://localhost:5001 || exit 1
+
+  
+  cleanup:
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+    - name: Cleanup Docker containers
+      run: docker-compose down
